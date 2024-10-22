@@ -8,6 +8,9 @@ import companiesRouter from './routes/empresas.js';
 import paymethodsRouter from './routes/paymentmethods.js';
 import intentsRouter from './routes/intents.js';
 import pipelinesRouter from './routes/pipelines.js'
+import settingsRouter from './routes/settings.js';
+import clientesRouter from './routes/clientes.js';
+
 
 const app = express()
 const corsOption = {
@@ -33,6 +36,8 @@ app.use("/", companiesRouter);
 app.use("/", paymethodsRouter);
 app.use("/", intentsRouter);
 app.use("/", pipelinesRouter);
+app.use("/", settingsRouter);
+app.use("/", clientesRouter);
 
 
 app.listen(8000, () => {
