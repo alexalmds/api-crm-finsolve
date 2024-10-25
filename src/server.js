@@ -10,6 +10,9 @@ import intentsRouter from './routes/intents.js';
 import pipelinesRouter from './routes/pipelines.js'
 import settingsRouter from './routes/settings.js';
 import clientesRouter from './routes/clientes.js';
+import setorRouter from './routes/setor.js';
+import servicoRouter from './routes/servicos.js';
+import modelosCRouter from './routes/modeloContratos.js';
 
 
 const app = express()
@@ -38,6 +41,9 @@ app.use("/", intentsRouter);
 app.use("/", pipelinesRouter);
 app.use("/", settingsRouter);
 app.use("/", clientesRouter);
+app.use("/", setorRouter);
+app.use("/", servicoRouter);
+app.use("/", modelosCRouter);
 
 
 app.listen(8000, () => {
