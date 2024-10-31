@@ -1,5 +1,6 @@
 import mysql from 'mysql2';
 import dotenv from 'dotenv';
+import chalk from 'chalk';
 
 // Carregar variáveis de ambiente do arquivo .env
 dotenv.config({ path: "./.env" });
@@ -17,8 +18,8 @@ export const db = mysql.createConnection(options);
 // Conectar ao banco de dados
 db.connect((err) => {
     if (err) {
-        console.error('Erro ao conectar ao banco de dados:', err);
+        console.log(chalk.red('[DATABASE] ') + chalk.gray("An error was occurred whiling initialization connection to database"));
         return;
     }
-    console.log('Conexão bem-sucedida ao banco de dados');
+    console.log(chalk.green("[DATABASE] ") + chalk.blue("Successfuly connection to database"));
 });

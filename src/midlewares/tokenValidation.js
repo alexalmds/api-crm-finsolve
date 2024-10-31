@@ -4,7 +4,6 @@ export const checkToken = (req, res, next) => {
     const authHeader = req.headers.cookie?.split("; ")[0]
     const token = authHeader && authHeader.split("=")[1]
     const {secret} = req.query;
-    console.log(secret)
     if (token){
         try{
             jwt.verify(token, process.env.TOKEN)

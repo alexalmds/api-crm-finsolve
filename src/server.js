@@ -2,6 +2,7 @@ import express from 'express'
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import chalk, { Chalk } from 'chalk';
 //--- Abaixo importação de todas as rotas
 import userRouter from './routes/users.js';
 import companiesRouter from './routes/empresas.js';
@@ -13,6 +14,9 @@ import clientesRouter from './routes/clientes.js';
 import setorRouter from './routes/setor.js';
 import servicoRouter from './routes/servicos.js';
 import modelosCRouter from './routes/modeloContratos.js';
+import boletosRouter from './routes/boletos.js';
+import startCronJob from './crontabs/nodecron.js';
+import cobrancasRouter from './routes/cobrancas.js';
 
 
 const app = express()
@@ -44,8 +48,11 @@ app.use("/", clientesRouter);
 app.use("/", setorRouter);
 app.use("/", servicoRouter);
 app.use("/", modelosCRouter);
+app.use("/", boletosRouter);
+app.use("/", cobrancasRouter);
 
+startCronJob();
 
 app.listen(8000, () => {
-    console.log("[servidor] server was started on PORT 8000")
+    console.log(chalk.green("[SERVIDOR] ") + chalk.blueBright("Server was started on PORT: ") + chalk.cyan("8000"))
 })

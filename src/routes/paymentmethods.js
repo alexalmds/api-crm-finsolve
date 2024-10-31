@@ -8,6 +8,7 @@ const control = new PaymentMethods();
 router.post("/payment-methods/create", checkToken, control.createPaymentMethod);
 router.patch("/payment-methods/update", checkToken, control.updatePaymentMethod);
 router.post("/payment-methods/list", checkToken, control.listPaymentMethods);
+router.post("/payment-methods/list-payments-methods", checkToken, control.listPaymentMethodsEmpresa);
 router.delete("/payment-methods/delete", checkToken, control.deletePaymentMethod);
 
 export default router;

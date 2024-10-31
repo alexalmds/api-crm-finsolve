@@ -1,5 +1,6 @@
 import { db } from "../connect.js";
 const api_v = process.env.API_VERSION;
+import axios from 'axios';
 
 export class Clientes {
     // Método para criar um cliente
@@ -226,18 +227,18 @@ export class Clientes {
 
     // Método para obter cliente por ID
     async getClienteById(req, res) {
-        const { id_cliente } = req.query;
+        const { id_empresa } = req.body;
 
         try {
-            if (!id_cliente) {
+            if (!id_empresa) {
                 return res.status(400).send({
                     status: 400,
                     type: "Bad Request",
-                    message: "O campo 'id_cliente' é obrigatório."
+                    message: "O campo 'id_empresa' é obrigatório."
                 });
             }
 
-            db.query("SELECT * FROM clientes WHERE id_cliente = ?", [id_cliente], (err, results) => {
+            db.query("SELECT nome_cliente as label, id_cliente as value FROM clientes WHERE id_empresa = ?", [id_empresa], (err, results) => {
                 if (err) {
                     console.log(err);
                     return res.status(500).send({
@@ -248,7 +249,12 @@ export class Clientes {
                         error: err,
                     });
                 }
-                return res.status(200).send(results[0]);
+                results.forEach((s) => {
+                    if (!s.description){
+                        s.description = 'No description available'
+                    }
+                })
+                return res.status(200).send(results);
             });
         } catch (ex) {
             console.log(ex);
@@ -262,4 +268,88 @@ export class Clientes {
             });
         }
     }
+
+
+    async importarClientes(req, res) {
+        const asaasApiKey = req.body.asaasApiKey;
+        const environment = req.body.environment;
+        const {id_empresa} = req.body;
+        const limit = 100; // Limite de clientes por requisição
+        let offset = 0;
+        let hasMore = true;
+        const api_v = process.env.API_VERSION;
+        console.log(asaasApiKey)
+
+        // Define a URL da API do Asaas
+        const asaasUrl = environment === 'prod' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
+
+        try {
+            while (hasMore) {
+                // Requisição para buscar clientes do Asaas
+                const response = await axios.get(`${asaasUrl}/customers`, {
+                    headers: { access_token: `${asaasApiKey}` },
+                    params: { offset, limit }
+                });
+
+                const clientes = response.data.data;
+
+                // Caso não haja clientes, encerra a busca
+                if (!clientes || clientes.length === 0) {
+                    hasMore = false;
+                    break;
+                }
+
+                // Loop para inserir/atualizar clientes no banco sem duplicar
+                for (const cliente of clientes) {
+                    const [existingCliente] = await db.promise().query(
+                        "SELECT id_cliente FROM clientes WHERE cpf_cnpj = ?", [cliente.cpfCnpj]
+                    );
+
+                    if (existingCliente.length > 0) {
+                        // Cliente já existe, pode optar por atualizar ou não
+                        continue; // Se não quiser atualizar, use continue, caso contrário, implemente a lógica de atualização
+                    }
+
+                    // Inserindo novo cliente
+                    await db.promise().query(
+                        `INSERT INTO clientes (customerId, id_empresa, nome_cliente, cpf_cnpj, email_cliente, telefone_cliente, status, pais, cidade, estado, cep, whatsapp, data_criacao)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                        [
+                            cliente.id,
+                            id_empresa, // ID da empresa
+                            cliente.name,
+                            cliente.cpfCnpj,
+                            cliente.email || null, // Usa null se o email for indefinido
+                            cliente.mobilePhone || null, // Usa null se o telefone for indefinido
+                            'ATIVO', // Definindo status padrão como 'ATIVO'
+                            cliente.country || 'Brasil', // Usa 'Brasil' se o país for indefinido
+                            cliente.city || null,
+                            cliente.state || null,
+                            cliente.postalCode || null,
+                            cliente.whatsapp || null // Se houver um campo de WhatsApp, use-o
+                        ]
+                    );
+                }
+
+                // Incrementa o offset para a próxima página
+                offset += limit;
+
+                // Verifica se há mais clientes a serem buscados
+                hasMore = response.data.hasMore;
+            }
+
+            console.log("Importação de clientes concluída com sucesso.");
+            return res.status(200).send({ message: "Importação de clientes concluída com sucesso." });
+        } catch (error) {
+            console.error("Erro ao importar clientes:", error);
+            return res.status(500).send({
+                status: 500,
+                type: "Internal Server Error",
+                message: "Erro ao importar clientes.",
+                api_version: api_v,
+                error: error
+            });
+        }
+    }
+
 }

@@ -124,4 +124,24 @@ export class PaymentMethods {
             return res.status(500).send({ message: ex.message });
         }
     }
+
+    async listPaymentMethodsEmpresa(req, res) {
+        const { id_empresa } = req.body;  // Assume que o ID da empresa vem do token JWT
+
+        try {
+            db.query("SELECT descricao as label, id_forma_pagamento as value, 'No description Available' as description FROM formas_pagamento WHERE id_empresa = ?", [id_empresa], (err, results) => {
+                if (err) {
+                    return res.status(500).send({
+                        status: 500,
+                        type: "Internal Server Error",
+                        message: "Erro ao listar formas de pagamento.",
+                        error: err,
+                    });
+                }
+                return res.status(200).send(results);
+            });
+        } catch (ex) {
+            return res.status(500).send({ message: ex.message });
+        }
+    }
 }

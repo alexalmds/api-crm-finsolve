@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { db } from "../connect.js";
 const api_v = process.env.API_VERSION;
 
@@ -115,6 +116,27 @@ export class Empresas {
             });
         } catch (ex) {
             return res.status(500).send({ message: ex.message });
+        }
+    }
+
+
+    async getAllCompanies() {
+        try {
+            const query = "SELECT * FROM empresas";
+            const params = [];
+            
+            return new Promise((resolve, reject) => {
+                db.query(query, params, (err, results) => {
+                    if (err) {
+                        console.log(err);
+                        return reject(err);
+                    }
+                    resolve(results);
+                });
+            });
+        } catch (ex) {
+            console.log(ex);
+            throw ex;
         }
     }
 }

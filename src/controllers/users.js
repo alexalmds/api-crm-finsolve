@@ -2,6 +2,7 @@ import { db } from "../connect.js";
 import { compare, hash } from "bcrypt";
 import crypto from "crypto"; // Para gerar o código 2FA
 import jwt from 'jsonwebtoken';
+import { sendMessage } from "../transactions/whatsapp.js";
 
 const api_v = process.env.API_VERSION;
 
@@ -160,11 +161,25 @@ export class Users {
                                     error: err,
                                 });
                             }
-                            return res.status(200).send({
-                                autenticacao_2fa: "pendente",
-                                message: "Código 2FA enviado!",
-                                user: user.id_usuario,
-                            });
+                            db.query("SELECT telefone FROM users WHERE id_usuario = ?", [user.id_usuario], 
+                                (err, result) => {
+                                    if (err){
+                                        return res.status(500).send({
+                                            message: "Erro ao enviar código 2FA.",
+                                            error: err,
+                                        });
+                                    }
+                                    else {
+                                        const telefone = result[0].telefone;
+                                        sendMessage(telefone, `🔐 Seu código FinSolve: *${twoFaCode}* \n Use-o para confirmar seu acesso. *Não compartilhe este código!*`);
+                                        return res.status(200).send({
+                                            autenticacao_2fa: "pendente",
+                                            message: "Código 2FA enviado!",
+                                            user: user.id_usuario,
+                                        });
+                                    }
+                                }
+                            )
                         }
                     );
                 } else {
@@ -185,6 +200,10 @@ export class Users {
                             { algorithm: "HS256" }
                         );
                         delete user.senha;
+                        const [company] = db.promise().query(
+                            `SELECT emp.*, s.*, u.id_usuario FROM empresas emp INNER JOIN settings s ON s.id_empresa = emp.id_empresa INNER JOIN users u ON u.id_empresa = emp.id_empresa WHERE u.id_usuario = ?`,
+                            [user.id_usuario]
+                        );
                         return res
                             .cookie("accessToken", token, {
                                 httpOnly: true
@@ -195,7 +214,8 @@ export class Users {
                             .status(200)
                             .json({
                                 message: "Successful login",
-                                user
+                                user,
+                                company: company[0]
                             })
                     }
                     catch (ex) {
@@ -216,58 +236,68 @@ export class Users {
     // Método para finalizar o 2FA
     async finalizeTwoFa(req, res) {
         const { id_usuario, two_fa_code } = req.body;
-
+    
         try {
-            db.query("SELECT * FROM users WHERE id_usuario = ? AND two_fa_code = ?",
-                [id_usuario, two_fa_code],
-                (err, results) => {
-                    if (err || results.length === 0) {
-                        return res.status(401).send({ message: "Código 2FA inválido!" });
-                    }
-
-                    const user = results[0];
-                    try {
-                        const refreshToken = jwt.sign({
-                            exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
-                            id: user.senha
-                        },
-                            process.env.REFRESH,
-                            { algorithm: "HS256" }
-                        )
-                        const token = jwt.sign({
-                            exp: Math.floor(Date.now() / 1000) + 3600,
-                            id: user.senha
-                        },
-                            process.env.TOKEN,
-                            { algorithm: "HS256" }
-                        );
-                        delete user.senha;
-                        return res
-                            .cookie("accessToken", token, {
-                                httpOnly: true
-                            })
-                            .cookie("refreshToken", refreshToken, {
-                                httpOnly: true
-                            })
-                            .status(200)
-                            .json({
-                                autenticacao_2fa: "concluida",
-                               user,
-                            })
-                    }
-                    catch (ex) {
-                        console.log(ex)
-                        return res.status(500).send({
-                            msg: "Houve um erro interno do servidor. Tente novamente mais tarde!",
-                            stack: ex,
-                            time: new Date()
-                        })
-                    }
+            const [results] = await db.promise().query(
+                "SELECT * FROM users WHERE id_usuario = ? AND two_fa_code = ?",
+                [id_usuario, two_fa_code]
+            );
+    
+            if (results.length === 0) {
+                return res.status(401).send({ message: "Código 2FA inválido!" });
+            }
+    
+            const user = results[0];
+            try {
+                const refreshToken = jwt.sign({
+                    exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+                    id: user.senha
+                },
+                    process.env.REFRESH,
+                    { algorithm: "HS256" }
+                );
+    
+                const token = jwt.sign({
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    id: user.senha
+                },
+                    process.env.TOKEN,
+                    { algorithm: "HS256" }
+                );
+    
+                delete user.senha;
+    
+                const [company] = await db.promise().query(
+                    `SELECT emp.*, s.*, u.id_usuario 
+                     FROM empresas emp 
+                     INNER JOIN settings s ON s.id_empresa = emp.id_empresa 
+                     INNER JOIN users u ON u.id_empresa = emp.id_empresa 
+                     WHERE u.id_usuario = ?`,
+                    [user.id_usuario]
+                );
+    
+                return res
+                    .cookie("accessToken", token, { httpOnly: true })
+                    .cookie("refreshToken", refreshToken, { httpOnly: true })
+                    .status(200)
+                    .json({
+                        autenticacao_2fa: "concluida",
+                        user,
+                        company: company[0]
+                    });
+            } catch (ex) {
+                console.log(ex);
+                return res.status(500).send({
+                    msg: "Houve um erro interno do servidor. Tente novamente mais tarde!",
+                    stack: ex,
+                    time: new Date()
                 });
+            }
         } catch (ex) {
             return res.status(500).send({ message: ex.message });
         }
     }
+    
 
 
     async refresh(req, res) {
