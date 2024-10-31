@@ -21,7 +21,7 @@ import cobrancasRouter from './routes/cobrancas.js';
 
 const app = express()
 const corsOption = {
-    origin: "http://localhost:3000",
+    origin: "https://finsolve.com.br",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: [

@@ -5,8 +5,9 @@ import { sendMessage } from "../transactions/whatsapp.js";
 
 const apiVersion = process.env.API_VERSION;
 
-function getFormatedDate() {
-    const tomorrow = new Date(); // Cria uma nova instância de Date com a data e hora atuais
+function getFormatedDate(date) {
+
+    const tomorrow = date ? new Date(date) : new Date(); // Cria uma nova instância de Date com a data e hora atuais
 
     // Formata a data no formato YYYY-MM-DD
     const year = tomorrow.getFullYear();
@@ -71,7 +72,7 @@ export class Cobrancas {
         const asaasApiKey = req.body.asaasApiKey;
         const environment = req.body.environment;
         const id_empresa = req.body.id_empresa;
-        let { id, usuario, date, id_asaas_invoice, value, amount_invoice, dueDate, email, number, notify, issueDate } = req.body;
+        let { id, usuario, date, id_asaas_invoice, value, amount_invoice, dueDate, email, number, notify, issueDate, status } = req.body;
         const asaasUrl = environment === 'prod' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
 
         if (!id_empresa) {
@@ -87,6 +88,16 @@ export class Cobrancas {
         const paymentDate = new Date(date);
         const dueDateObj = new Date(dueDate);
         const issueDateObj = new Date(issueDate)
+
+        if (status == 'pago') {
+            return res.status(400).send({ message: "A fatura já foi paga!" })
+        }
+        if (status == 'estornado') {
+            return res.status(400).send({ message: "Esta fatura foi estornada. Verifique em movimentações" })
+        }
+        if (status == 'pendente') {
+            return res.status(400).send({ message: "A fatura não pode ser baixada porque não foi Lançada! Para Lançar uma fatura: Visualizar Fatura > + Ações > Lançar Cobrança." })
+        }
 
         if (isNaN(paymentDate.getTime()) || isNaN(dueDateObj.getTime())) {
             return res.status(400).send({
@@ -112,6 +123,15 @@ export class Cobrancas {
         //--Se tem integração com Asaas
         if (environment === 'prod') {
             try {
+                if (status == 'pago') {
+                    return res.status(400).send({ message: "A fatura já foi paga!" })
+                }
+                if (status == 'estornado') {
+                    return res.status(400).send({ message: "Esta fatura foi estornada. Verifique em movimentações" })
+                }
+                if (status == 'pendente') {
+                    return res.status(400).send({ message: "A fatura não pode ser baixada porque não foi Lançada! Para Lançar uma fatura: Visualizar Fatura > + Ações > Lançar Cobrança." })
+                }
                 if (!environment) {
                     return res.status(401).send({
                         statusCode: 401,
@@ -277,17 +297,17 @@ export class Cobrancas {
                     message: "Preencha os campos obrigatórios!"
                 });
             }
-    
+
             // Verifica se há parcelas
             if (parseInt(installment) > 1) {
                 installmentValue = parseFloat(value) / parseInt(installment);
             }
-    
+
             // Insere no banco
             let query = 'INSERT INTO boletos (id_cliente, id_empresa, data_emissao, data_vencimento, valor, status, descricao, tipo_juros, tipo_multa, valor_juros, valor_multa, forma_pagamento, installment_value, installment) ';
             query += " VALUES (?, ?, CURRENT_DATE, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?)";
             let params = [id_cliente, id_empresa, dueDate, value, descricao, type_juros, type_multa, valor_juros ? valor_juros : 0, valor_multa ? valor_multa : 0, payment_method, installmentValue, installment];
-    
+
             db.query(query, params, async (err, result) => { // Note o uso de `async` aqui
                 if (err) {
                     console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Houve um erro ao Lançar cobrança: " + err));
@@ -299,7 +319,7 @@ export class Cobrancas {
                         error: err
                     });
                 }
-    
+
                 if (notify) {
                     try {
                         const [client] = await db.promise().query(
@@ -310,7 +330,7 @@ export class Cobrancas {
                             `SELECT descricao FROM formas_pagamento WHERE id_forma_pagamento = ?`,
                             [payment_method]
                         );
-    
+
                         let number = client[0].whatsapp;
                         let email = client[0].email_cliente;
                         let nome = client[0].nome_cliente;
@@ -323,7 +343,7 @@ export class Cobrancas {
                         console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao buscar dados para notificação: " + error));
                     }
                 }
-    
+
                 return res.status(200).send({ message: "Cobrança lançada com sucesso!" });
             });
         } catch (ex) {
@@ -337,5 +357,181 @@ export class Cobrancas {
             });
         }
     }
-    
+
+
+    async lancarCobranca(req, res) {
+        let { id_empresa, id_cliente, dueDate, payment_method, value, usuario, id_boleto,
+            installment, fine, fineValue, interestValue, description, asaasApiKey, environment, local, status } = req.body;
+
+        if (status == 'pago') {
+            return res.status(400).send({ message: "A fatura já foi paga! Não é possível Lançar Novamente" })
+        }
+        if (status == 'estornado') {
+            return res.status(400).send({ message: "Esta fatura foi estornada. Verifique em movimentações" })
+        }
+        if (status == 'aberto') {
+            return res.status(400).send({ message: "Esta fatura já foi lançada. Verifique em movimentações" })
+        }
+        if (status == 'vencido') {
+            return res.status(400).send({ message: "Esta fatura está vencida! Não é possível realizar lançamento." })
+        }
+        if (local) {
+            try {
+                const [customer] = await db.promise().query(
+                    `SELECT nome_cliente, whatsapp, email_cliente FROM clientes WHERE id_cliente = ?`,
+                    [id_cliente]
+                );
+                db.query("INSERT INTO movimentacoes (id_empresa, id_boleto, id_usuario, tipo_movimentacao, valor, descricao) VALUES (?. ?. ?. ?. ?. ?)",
+                    [id_empresa, id_boleto, usuario, 'lancamento', value, 'Lançamento de Cobrança no Sistema'],
+                    (err, result) => {
+                        if (err) {
+                            console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobranca /cobrancas/lancar: " + err));
+                            return res.status(500).send({
+                                statusCode: 500,
+                                type: "Internal Server Error",
+                                message: `Houve um erro interno do servidor ao lançar a cobrança! Tente novamente mais tarde.`,
+                                error: err,
+                                api_version: apiVersion
+                            })
+                        }
+                        else {
+                            db.query("UPDATE boletos SET status = 'aberto' WHERE id = ?", [id_boleto], (err, result) => {
+                                if (err) {
+                                    console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobranca /cobrancas/lancar: " + err));
+                                    return res.status(500).send({
+                                        statusCode: 500,
+                                        type: "Internal Server Error",
+                                        message: `Houve um erro interno do servidor ao lançar a cobrança! Tente novamente mais tarde.`,
+                                        error: err,
+                                        api_version: apiVersion
+                                    })
+                                }
+                                else {
+                                    const { nome_cliente, whatsapp, email_cliente } = customer[0];
+                                    const message = `Olá, *${nome_cliente}*! \n\nInformamos que a cobrança *Nº ${id_boleto}* com vencimento para *${dueDate}* e valor de *R$ ${value}* foi lançada! Faça o pagamento dentro do prazo e evite transtornos.`;
+                                    sendMessage(whatsapp, message);
+                                    return res.status(200).send({ message: "A cobrança foi lançada com sucesso! Seu cliente foi notificado nas principais vias de comunicação." })
+                                }
+                            })
+                        }
+                    }
+                )
+            }
+            catch (ex) {
+                console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobrança no ASAAS: " + exception.response.data));
+                return res.status(500).send({
+                    statusCode: 500,
+                    type: "Internal Server Error",
+                    message: `Houve um erro interno do servidor ao solicitar requisição! Tente novamente mais tarde.`,
+                    error: ex,
+                    api_version: apiVersion
+                })
+            }
+        }
+        else {
+            try {
+                if (!environment) {
+                    return res.status(401).send({
+                        message: "Ambiente da integração não informado!",
+                        error: "Integration environment not specified in request"
+                    })
+                }
+                if (!asaasApiKey) {
+                    return res.status(401).send({
+                        message: "Chave de Acesso do ASAAS não identificado na solicitação.",
+                        error: "Missing KV 'asaasApiKey"
+                    })
+                }
+                const asaasUrl = environment === 'prod' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
+                const [customer] = await db.promise().query(
+                    `SELECT customerId, nome_cliente, whatsapp, email_cliente FROM clientes WHERE id_cliente = ?`,
+                    [id_cliente]
+                );
+                if (!customer[0].customerId || customer[0].customerId == null) {
+                    return res.status(400).send({
+                        message: "Este Cliente não possui cadastro vinculado ao Asaas. Tente vincular o cadastro ao AsaaS e tente lançar a cobrança novamente.",
+                        error: "Customer not found in Asaas database. try to register customer."
+                    })
+                }
+                let formData = {
+                    dueDate: getFormatedDate(dueDate),
+                    value: value,
+                    installment: installment ?? null,
+                    customer: customer[0].customerId,
+                    billingType: payment_method,
+                    totalValue: installment ? value : null,
+                    interest: interestValue ? { value: interestValue } : null,
+                    fine: fine ? { value: fineValue, type: fine } : null,
+                    description: description ?? null
+                }
+
+                axios.post(asaasUrl + `/payments`, formData, {
+                    headers: {
+                        accept: 'application/json',
+                        access_token: asaasApiKey
+                    }
+                })
+                    .then((resp) => {
+                        const id_asaas = resp.data.id;
+                        //insert da movimentação
+                        db.query("INSERT INTO movimentacoes (id_empresa, id_boleto, id_usuario, tipo_movimentacao, valor, descricao) VALUES (?, ?, ?, ?, ?, ?)",
+                            [id_empresa, id_boleto, usuario, 'lancamento', value, 'Lançamento de Cobrança no Sistema'],
+                            (err, result) => {
+                                if (err) {
+                                    console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobranca /cobrancas/lancar: " + err));
+                                    return res.status(500).send({
+                                        statusCode: 500,
+                                        type: "Internal Server Error",
+                                        message: `Houve um erro interno do servidor ao lançar a cobrança! Tente novamente mais tarde.`,
+                                        error: err,
+                                        api_version: apiVersion
+                                    })
+                                }
+                                else {
+                                    db.query("UPDATE boletos SET status = 'aberto', id_boleto = ? WHERE id = ?", [id_asaas, id_boleto], (err, result) => {
+                                        if (err) {
+                                            console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobranca /cobrancas/lancar: " + err));
+                                            return res.status(500).send({
+                                                statusCode: 500,
+                                                type: "Internal Server Error",
+                                                message: `Houve um erro interno do servidor ao lançar a cobrança! Tente novamente mais tarde.`,
+                                                error: err,
+                                                api_version: apiVersion
+                                            })
+                                        }
+                                        else {
+                                            const { nome_cliente, whatsapp, email_cliente } = customer[0];
+                                            const message = `Olá, *${nome_cliente}*! \n\nInformamos que a cobrança *Nº ${id_boleto}* com vencimento para *${dueDate}* e valor de *R$ ${value}* foi lançada! Faça o pagamento dentro do prazo e evite transtornos.`;
+                                            sendMessage(whatsapp, message);
+                                            return res.status(200).send({ message: "A cobrança foi lançada com sucesso! Seu cliente foi notificado nas principais vias de comunicação." })
+                                        }
+                                    })
+                                }
+                            }
+                        )
+                    })
+                    .catch((exception) => {
+                        console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobrança no ASAAS: " + exception.response.data.errors[0].description));
+                        return res.status(500).send({
+                            statusCode: 500,
+                            type: "Internal Server Error",
+                            message: `Houve um erro interno do servidor ao lançar a cobrança! Tente novamente mais tarde.`,
+                            error: exception.response.data.errors[0].description,
+                            api_version: apiVersion
+                        })
+                    })
+            }
+            catch (ex) {
+                console.log(chalk.red("[SERVIDOR] ") + chalk.redBright(" Erro ao Lançar cobrança no ASAAS: " + exception.response.data));
+                return res.status(500).send({
+                    statusCode: 500,
+                    type: "Internal Server Error",
+                    message: `Houve um erro interno do servidor ao solicitar requisição! Tente novamente mais tarde.`,
+                    error: ex,
+                    api_version: apiVersion
+                })
+            }
+        }
+    }
+
 }
