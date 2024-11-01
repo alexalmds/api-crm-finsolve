@@ -8,13 +8,13 @@ export class BoletoController {
         const asaasApiKey = req.body.asaasApiKey;
         const environment = req.body.environment;
         const id_empresa = req.body.id_empresa;
-        const asaasUrl = environment === 'prod' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
+        const asaasUrl = environment === 'production' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
         const limit = 100;
 
         let offset = 0;
         let hasMore = true;
         const statusMap = {
-            'PENDING': 'pendente',
+            'PENDING': 'aberto',
             'RECEIVED': 'pago',
             'OVERDUE': 'vencido',
             'RECEIVED_IN_CASH': 'pago',
