@@ -281,7 +281,7 @@ export class Clientes {
         console.log(asaasApiKey)
 
         // Define a URL da API do Asaas
-        const asaasUrl = environment === 'prod' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
+        const asaasUrl = environment === 'production' ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
 
         try {
             while (hasMore) {
