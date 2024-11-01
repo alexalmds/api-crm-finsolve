@@ -105,7 +105,7 @@ export class BoletoController {
     async getPendingInvoices(id_empresa) {
         const query = `
             SELECT b.*, c.nome_cliente, c.email_cliente, c.whatsapp FROM boletos b INNER JOIN clientes c ON c.id_cliente = b.id_cliente 
-            WHERE b.status = 'pendente' 
+            WHERE  (b.status = 'pendente' OR b.status = 'vencido' OR b.status = 'aberto') 
             AND b.id_empresa = ${id_empresa}
             ORDER BY b.data_vencimento ASC
         `;
