@@ -1,3 +1,4 @@
+import axios from "axios";
 import { db } from "../connect.js";
 const api_v = process.env.API_VERSION;
 
@@ -194,5 +195,22 @@ export class Settings {
                 error: ex,
             });
         }
+    }
+
+
+    async getQRCode(req, res){
+        const {id_empresa, production_env, tokenApi} = req.body;
+        if (!id_empresa){
+            return res.status(400).send({
+                message: "Incorrect value or missing data. Filed 'id_empresa'"
+            })
+        }
+        axios.get(`http://localhost:8001/V1/session/status?production_env=${production_env}&tokenApi=${tokenApi}&id_empresa_s=${id_empresa}`).then((resp)=> {
+            return res.json({status: resp.data.status, qrCode: resp.data.qrCode})
+        }).catch((exception) => {
+            return res.status(500).send({
+                message: `Issue error: ${exception}`
+            })
+        })
     }
 }
