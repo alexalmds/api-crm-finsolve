@@ -381,7 +381,7 @@ export class Cobrancas {
                     `SELECT nome_cliente, whatsapp, email_cliente FROM clientes WHERE id_cliente = ?`,
                     [id_cliente]
                 );
-                db.query("INSERT INTO movimentacoes (id_empresa, id_boleto, id_usuario, tipo_movimentacao, valor, descricao) VALUES (?. ?. ?. ?. ?. ?)",
+                db.query("INSERT INTO movimentacoes (id_empresa, id_boleto, id_usuario, tipo_movimentacao, valor, descricao) VALUES (?, ?, ?, ?, ?, ?)",
                     [id_empresa, id_boleto, usuario, 'lancamento', value, 'Lançamento de Cobrança no Sistema'],
                     (err, result) => {
                         if (err) {
