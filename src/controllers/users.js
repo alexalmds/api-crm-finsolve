@@ -200,7 +200,7 @@ export class Users {
                             { algorithm: "HS256" }
                         );
                         delete user.senha;
-                        const [company] = db.promise().query(
+                        const [company] = await db.promise().query(
                             `SELECT emp.*, s.*, u.id_usuario FROM empresas emp INNER JOIN settings s ON s.id_empresa = emp.id_empresa INNER JOIN users u ON u.id_empresa = emp.id_empresa WHERE u.id_usuario = ?`,
                             [user.id_usuario]
                         );
