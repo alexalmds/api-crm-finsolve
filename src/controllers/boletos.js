@@ -20,6 +20,11 @@ export class BoletoController {
             'RECEIVED_IN_CASH': 'pago',
             'CONFIRMED': 'pago'
         };
+        const paymentMap = {
+            'BOLETO': 'boleto',
+            'CREDIT_CARD': 'cartao_credito',
+            'PIX': 'pix',
+        };
 
         try {
             while (hasMore) {
@@ -42,9 +47,14 @@ export class BoletoController {
                 for (const boleto of boletos) {
                     // Busca o id_cliente com base no customerId do Asaas
                     const status = statusMap[boleto.status] || 'pendente';
+                    const payment = status[boleto.billingTpe] || 'boleto'
                     const [cliente] = await db.promise().query(
                         "SELECT id_cliente FROM clientes WHERE customerId = ?", [boleto.customer]
                     );
+                    const [id_payment] = await db.promise().query(
+                        "SELECT id_forma_pagamento FROM formas_pagamento WHERE tipo = ?", [payment]
+                    );
+                    const mPayment = id_payment[0].id_forma_pagamento;
 
                     if (cliente.length === 0) {
                         console.warn(`Cliente com customerId ${boleto.customer} não encontrado no banco de dados.`);
@@ -62,8 +72,8 @@ export class BoletoController {
 
                     // Inserindo novo boleto com id_cliente obtido
                     await db.promise().query(
-                        `INSERT INTO boletos (id_boleto, id_cliente, id_empresa, data_emissao, data_vencimento, valor, status, sincronizado_em)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+                        `INSERT INTO boletos (id_boleto, id_cliente, id_empresa, data_emissao, data_vencimento, valor, status, sincronizado_em, forma_pagamento)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
                         [
                             boleto.id,
                             id_cliente,       // ID do cliente do banco de dados
@@ -71,7 +81,8 @@ export class BoletoController {
                             boleto.dateCreated,
                             boleto.dueDate,
                             boleto.value,
-                            status
+                            status,
+                            mPayment
                         ]
                     );
                 }
